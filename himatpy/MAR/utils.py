@@ -15,9 +15,10 @@ __author__ = ['Anthony Arendt','Zheng Liu']
 
 
 
-def get_xr_dataset_zarr(zstore,  twoDcoords=False, keepVars=['SMB'], keepDims=[],**kwargs):
+def get_xr_dataset(zstore=None,files=None,datadir=None, fname=None,multiple_nc=False, 
+                        twoDcoords=False, keepVars=None, keepDims=[],**kwargs):
     """
-    Reads in High Mountain Asia MAR V3.5 Regional Climate Model Output from a zarr store. 
+    Reads in High Mountain Asia MAR V3.5 Regional Climate Model Output from a zarr store or nc files. 
     Returns a "cleaned" xarray dataset.  
     :param zstore: path to the store containing the data. 
     :param keepVars: list of variables to keep
@@ -33,12 +34,27 @@ def get_xr_dataset_zarr(zstore,  twoDcoords=False, keepVars=['SMB'], keepDims=[]
     # Density of Water
     Ro_w = 1.e3
     
+    if zstore is not None:
+        ds   = xr.open_zarr(zstore, **kwargs)
+    elif not multiple_nc:
+        try:
+            ds = xr.open_dataset( fname, **kwargs)
+        except:
+            print("Please provide filename!")
+            sys.exit("Exiting...")
+    else:
+        if datadir is not None:
+            ds = xr.open_mfdataset(os.path.join(datadir, '*.nc'), **kwargs)
+        elif files is not None:
+            ds = xr.open_mfdataset(files, **kwargs)
+        else:
+            print('Need either datadir or files for opening multiple netCDF')
+            
     # Necessary dimensions 
     needDims = ['TIME','X11_210','Y11_190']
-    if 'SMB' in keepVars: needDims += ['SECTOR']
-    keepDims += [tdim for tdim in needDims if tdim not in keepDims]
+    if 'SMB' in keepVars: needDims = needDims + ['SECTOR']
+    keepDims = keepDims + [tdim for tdim in needDims if tdim not in keepDims]
     
-    ds   = xr.open_zarr(zstore, **kwargs)
     dzsn = ds['DZSN1']
     rosn = ds['ROSN1']
     swe  = (dzsn*rosn).sum('SNOLAY')/Ro_w
@@ -46,7 +62,7 @@ def get_xr_dataset_zarr(zstore,  twoDcoords=False, keepVars=['SMB'], keepDims=[]
     tt   = ds.TIME
     t0   = tt[0]
     d_tt = ( tt - t0 ) / np.timedelta64(1,'D')
-    if keepVars:
+    if keepVars is not None:
         try:
             products = [x for x in ds]
             deleted_vars = [y for y in products if y not in keepVars+['LAT','LON']]
